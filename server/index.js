@@ -2,11 +2,12 @@ const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
 const routeCoordinates = require("./routeData");
+const { stat } = require("fs");
 
 const buses = [
-  { id: "BUS_1", index: 0 },
-  { id: "BUS_2", index: 2 },
-  { id: "BUS_3", index: 4 },
+  { id: "BUS_1", index: 0, status: "RUNNING" },
+  { id: "BUS_2", index: 2, status: "RUNNING"},
+  { id: "BUS_3", index: 4, status: "RUNNING" },
 ];
 
 
@@ -24,16 +25,19 @@ io.on("connection", (socket) => {
 setInterval(() => {
   const busesDataArray = buses.map(bus => {
     const point = routeCoordinates[bus.index];
-    bus.index = (bus.index + 1) % routeCoordinates.length;
-    return {
+    if(!point) return null;
+    const payload = {
       id: bus.id,
       lat: point.lat,
       lng: point.lng,
-      index: bus.index
+      index: bus.index,
+      status: bus.status,
     };
-  });
 
-  console.log(busesDataArray)
+    bus.index = (bus.index + 1) % routeCoordinates.length;
+    return payload;
+  }).filter(Boolean);
+
 
   io.emit("busLocations", busesDataArray);
 

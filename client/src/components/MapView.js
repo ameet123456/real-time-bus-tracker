@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { io } from "socket.io-client";
 import "../map.css";
@@ -13,6 +13,15 @@ export default function MapView() {
   const mapRef = useRef(null);
   const markersRef = useRef({});
   const socketRef = useRef(null);
+  const selectedBusRef = useRef(null);
+
+
+  const [busesData, setBusesData] = useState([]);
+  const [selectedBusId, setSelectedBusId] = useState(null);
+  useEffect(() => {
+  selectedBusRef.current = selectedBusId;
+}, [selectedBusId]);
+
 
   function animateMarker(marker, newLat, newLng) {
     if (marker._animationInterval) {
@@ -33,31 +42,28 @@ export default function MapView() {
         clearInterval(marker._animationInterval);
         marker._animationInterval = null;
       } else {
-        marker.setLatLng([
-          start.lat + dLat * frame,
-          start.lng + dLng * frame,
-        ]);
+        marker.setLatLng([start.lat + dLat * frame, start.lng + dLng * frame]);
         frame++;
       }
     }, duration / frames);
   }
 
   const route = [
-    { lat: 21.0000, lng: 83.7800 },
-    { lat: 21.0020, lng: 83.7815 },
-    { lat: 21.0040, lng: 83.7830 },
-    { lat: 21.0060, lng: 83.7845 },
-    { lat: 21.0080, lng: 83.7860 },
-    { lat: 21.0100, lng: 83.7875 },
-    { lat: 21.0120, lng: 83.7890 },
-    { lat: 21.0140, lng: 83.7905 },
-    { lat: 21.0160, lng: 83.7920 },
-    { lat: 21.0180, lng: 83.7935 },
-    { lat: 21.0200, lng: 83.7950 },
+    { lat: 21.0, lng: 83.78 },
+    { lat: 21.002, lng: 83.7815 },
+    { lat: 21.004, lng: 83.783 },
+    { lat: 21.006, lng: 83.7845 },
+    { lat: 21.008, lng: 83.786 },
+    { lat: 21.01, lng: 83.7875 },
+    { lat: 21.012, lng: 83.789 },
+    { lat: 21.014, lng: 83.7905 },
+    { lat: 21.016, lng: 83.792 },
+    { lat: 21.018, lng: 83.7935 },
+    { lat: 21.02, lng: 83.795 },
   ];
 
   useEffect(() => {
-    // INIT MAP (ONCE)
+    // INIT MAP (once)
     if (!mapRef.current) {
       mapRef.current = L.map("map");
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -68,38 +74,55 @@ export default function MapView() {
       mapRef.current.fitBounds(L.latLngBounds(route));
     }
 
-    // INIT SOCKET (ONCE)
+    // INIT SOCKET (once)
     socketRef.current = io("http://localhost:3001");
 
     socketRef.current.on("busLocations", (buses) => {
+      setBusesData(buses);
+
       buses.forEach(({ id, lat, lng }) => {
         if (!markersRef.current[id]) {
           markersRef.current[id] = L.marker([lat, lng], {
             icon: busIcon,
-          }).addTo(mapRef.current);
+          })
+            .addTo(mapRef.current)
+            .on("click", () => setSelectedBusId(id));
         } else {
-          const current = markersRef.current[id].getLatLng();
-
-          // prevent huge wrap-around animation
-          if (Math.abs(current.lat - lat) > 0.01) {
-            markersRef.current[id].setLatLng([lat, lng]);
-          } else {
-            animateMarker(markersRef.current[id], lat, lng);
-          }
+          animateMarker(markersRef.current[id], lat, lng);
         }
+        if (id === selectedBusRef.current) {
+  mapRef.current.panTo([lat, lng], {
+    animate: true,
+    duration: 1,
+  });
+}
+
       });
     });
 
     return () => {
       socketRef.current.disconnect();
-      socketRef.current = null;
-
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
     };
-  }, []);
+  }, []); // intentional
 
-  return <div id="map"></div>;
+  return (
+    <>
+      <div id="map"></div>
+
+      <div className="bus-panel">
+        <h3>Active Buses</h3>
+        {busesData.map((bus) => (
+          <div
+            key={bus.id}
+            className={`bus-item ${selectedBusId === bus.id ? "active" : ""}`}
+            onClick={() => setSelectedBusId(bus.id)}
+          >
+            <strong>{bus.id}</strong>
+            <div>Index: {bus.index}</div>
+            <div>Status: {bus.status}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }

@@ -18,3 +18,26 @@ html, body, #root, #map {
 .leaflet-tile {
   border: none !important;
 }
+.bus-panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 160px;
+  z-index: 1000;
+}
+
+.bus-item {
+  margin-bottom: 8px;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.bus-item.active {
+  background: #e6f2ff;
+  font-weight: bold;
+}
