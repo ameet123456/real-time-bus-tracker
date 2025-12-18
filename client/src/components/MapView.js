@@ -110,19 +110,28 @@ export default function MapView() {
       <div id="map"></div>
 
       <div className="bus-panel">
-        <h3>Active Buses</h3>
-        {busesData.map((bus) => (
-          <div
-            key={bus.id}
-            className={`bus-item ${selectedBusId === bus.id ? "active" : ""}`}
-            onClick={() => setSelectedBusId(bus.id)}
-          >
-            <strong>{bus.id}</strong>
-            <div>Index: {bus.index}</div>
-            <div>Status: {bus.status}</div>
-          </div>
-        ))}
+  <h3>Active Buses</h3>
+  {busesData.map((bus) => (
+    <div
+      key={bus.id}
+      className={`bus-item ${
+        selectedBusId === bus.id ? "active" : ""
+      }`}
+      onClick={() => setSelectedBusId(bus.id)}
+    >
+      <strong>{bus.id}</strong>
+      <div>Status: {bus.status}</div>
+      <div>
+        ETA: {Math.floor(bus.etaSeconds / 60)
+          .toString()
+          .padStart(2, "0")}
+        :
+        {(bus.etaSeconds % 60).toString().padStart(2, "0")}
       </div>
+    </div>
+  ))}
+</div>
+
     </>
   );
 }

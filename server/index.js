@@ -6,8 +6,8 @@ const { stat } = require("fs");
 
 const buses = [
   { id: "BUS_1", index: 0, status: "RUNNING" },
-  { id: "BUS_2", index: 2, status: "RUNNING"},
-  { id: "BUS_3", index: 4, status: "RUNNING" },
+  { id: "BUS_2", index: 3, status: "RUNNING"},
+  { id: "BUS_3", index: 5, status: "RUNNING" },
 ];
 
 
@@ -26,15 +26,22 @@ setInterval(() => {
   const busesDataArray = buses.map(bus => {
     const point = routeCoordinates[bus.index];
     if(!point) return null;
+    const remainingSegments =
+    routeCoordinates.length - bus.index - 1;
+
+  const etaSeconds = Math.max(remainingSegments * 2, 0);
+
     const payload = {
       id: bus.id,
       lat: point.lat,
       lng: point.lng,
       index: bus.index,
       status: bus.status,
+      etaSeconds,
     };
 
     bus.index = (bus.index + 1) % routeCoordinates.length;
+    //console.log("Bus Update:", payload);
     return payload;
   }).filter(Boolean);
 
