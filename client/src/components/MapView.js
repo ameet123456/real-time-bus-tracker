@@ -15,38 +15,40 @@ export default function MapView() {
   const socketRef = useRef(null);
   const selectedBusRef = useRef(null);
 
-
   const [busesData, setBusesData] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
   useEffect(() => {
-  selectedBusRef.current = selectedBusId;
-}, [selectedBusId]);
+    selectedBusRef.current = selectedBusId;
+  }, [selectedBusId]);
 
-
-  function animateMarker(marker, newLat, newLng) {
-    if (marker._animationInterval) {
-      clearInterval(marker._animationInterval);
-    }
-
-    const duration = 2000;
-    const frames = 60;
-    const start = marker.getLatLng();
-
-    const dLat = (newLat - start.lat) / frames;
-    const dLng = (newLng - start.lng) / frames;
-
-    let frame = 0;
-
-    marker._animationInterval = setInterval(() => {
-      if (frame >= frames) {
-        clearInterval(marker._animationInterval);
-        marker._animationInterval = null;
-      } else {
-        marker.setLatLng([start.lat + dLat * frame, start.lng + dLng * frame]);
-        frame++;
-      }
-    }, duration / frames);
+function animateMarker(marker, newLat, newLng) {
+  if (marker._interval) {
+    clearInterval(marker._interval);
   }
+
+  const duration = 1800;
+  const frames = 60;
+  const start = marker.getLatLng();
+
+  const dLat = (newLat - start.lat) / frames;
+  const dLng = (newLng - start.lng) / frames;
+
+  let frame = 0;
+
+  marker._interval = setInterval(() => {
+    if (frame >= frames) {
+      clearInterval(marker._interval);
+    } else {
+      marker.setLatLng([
+        start.lat + dLat * frame,
+        start.lng + dLng * frame,
+      ]);
+      frame++;
+    }
+  }, duration / frames);
+}
+
+
 
   const route = [
     { lat: 21.0, lng: 83.78 },
@@ -76,29 +78,47 @@ export default function MapView() {
 
     // INIT SOCKET (once)
     socketRef.current = io("http://localhost:3001");
+socketRef.current.emit("joinRoute", "R2");
 
-    socketRef.current.on("busLocations", (buses) => {
-      setBusesData(buses);
 
-      buses.forEach(({ id, lat, lng }) => {
-        if (!markersRef.current[id]) {
-          markersRef.current[id] = L.marker([lat, lng], {
-            icon: busIcon,
-          })
-            .addTo(mapRef.current)
-            .on("click", () => setSelectedBusId(id));
-        } else {
-          animateMarker(markersRef.current[id], lat, lng);
-        }
-        if (id === selectedBusRef.current) {
-  mapRef.current.panTo([lat, lng], {
-    animate: true,
-    duration: 1,
+socketRef.current.on("busLocationUpdate", (bus) => {
+  setBusesData((prev) => {
+    const exists = prev.find((b) => b.id === bus.id);
+
+    if (exists) {
+      return prev.map((b) => (b.id === bus.id ? bus : b));
+    } else {
+      return [...prev, bus];
+    }
   });
-}
 
-      });
-    });
+  const { id, lat, lng, status, etaSeconds, stopName } = bus;
+
+  if (!markersRef.current[id]) {
+    markersRef.current[id] = L.marker([lat, lng], {
+      icon: busIcon,
+    })
+      .addTo(mapRef.current)
+      .on("click", () => setSelectedBusId(id))
+      .bindPopup(id);
+  }
+
+  const popupText =
+    status === "STOPPED"
+      ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
+      : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+
+  markersRef.current[id].setPopupContent(popupText);
+
+  if (status === "RUNNING") {
+    animateMarker(markersRef.current[id], lat, lng);
+  }
+
+  if (id === selectedBusRef.current && status === "RUNNING") {
+    mapRef.current.panTo([lat, lng], { animate: true, duration: 1 });
+  }
+});
+
 
     return () => {
       socketRef.current.disconnect();
@@ -110,28 +130,29 @@ export default function MapView() {
       <div id="map"></div>
 
       <div className="bus-panel">
-  <h3>Active Buses</h3>
-  {busesData.map((bus) => (
-    <div
-      key={bus.id}
-      className={`bus-item ${
-        selectedBusId === bus.id ? "active" : ""
-      }`}
-      onClick={() => setSelectedBusId(bus.id)}
-    >
-      <strong>{bus.id}</strong>
-      <div>Status: {bus.status}</div>
-      <div>
-        ETA: {Math.floor(bus.etaSeconds / 60)
-          .toString()
-          .padStart(2, "0")}
-        :
-        {(bus.etaSeconds % 60).toString().padStart(2, "0")}
-      </div>
-    </div>
-  ))}
-</div>
+        <h3>Active Buses</h3>
+        {busesData.map((bus) => (
+          <div
+            key={bus.id}
+            className={`bus-item ${bus.status === "STOPPED" ? "stopped" : ""}`}
+          >
+            <strong>{bus.id}</strong>
 
+            <div>Status: {bus.status}</div>
+
+            {bus.status === "STOPPED" && (
+              <>
+                <div>At: {bus.stopName}</div>
+                <div>Departing in: {bus.etaSeconds}s</div>
+              </>
+            )}
+
+            {bus.status === "RUNNING" && (
+              <div>ETA to next stop: {bus.etaSeconds}s</div>
+            )}
+          </div>
+        ))}
+      </div>
     </>
   );
 }

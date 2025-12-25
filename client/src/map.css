@@ -41,3 +41,15 @@ html, body, #root, #map {
   background: #e6f2ff;
   font-weight: bold;
 }
+.bus-item.stopped {
+  background: #ffe5e5;
+  border-left: 4px solid #d32f2f;
+}
+
+.bus-item.stopped strong {
+  color: #d32f2f;
+}
+.bus-item.stopped {
+  background: #ffe5e5;
+  border-left: 4px solid #d32f2f;
+}
