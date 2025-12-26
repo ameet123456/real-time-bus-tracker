@@ -21,34 +21,29 @@ export default function MapView() {
     selectedBusRef.current = selectedBusId;
   }, [selectedBusId]);
 
-function animateMarker(marker, newLat, newLng) {
-  if (marker._interval) {
-    clearInterval(marker._interval);
-  }
-
-  const duration = 1800;
-  const frames = 60;
-  const start = marker.getLatLng();
-
-  const dLat = (newLat - start.lat) / frames;
-  const dLng = (newLng - start.lng) / frames;
-
-  let frame = 0;
-
-  marker._interval = setInterval(() => {
-    if (frame >= frames) {
+  function animateMarker(marker, newLat, newLng) {
+    if (marker._interval) {
       clearInterval(marker._interval);
-    } else {
-      marker.setLatLng([
-        start.lat + dLat * frame,
-        start.lng + dLng * frame,
-      ]);
-      frame++;
     }
-  }, duration / frames);
-}
 
+    const duration = 1800;
+    const frames = 60;
+    const start = marker.getLatLng();
 
+    const dLat = (newLat - start.lat) / frames;
+    const dLng = (newLng - start.lng) / frames;
+
+    let frame = 0;
+
+    marker._interval = setInterval(() => {
+      if (frame >= frames) {
+        clearInterval(marker._interval);
+      } else {
+        marker.setLatLng([start.lat + dLat * frame, start.lng + dLng * frame]);
+        frame++;
+      }
+    }, duration / frames);
+  }
 
   const route = [
     { lat: 21.0, lng: 83.78 },
@@ -76,54 +71,82 @@ function animateMarker(marker, newLat, newLng) {
       mapRef.current.fitBounds(L.latLngBounds(route));
     }
 
-    // INIT SOCKET (once)
     socketRef.current = io("http://localhost:3001");
-socketRef.current.emit("joinRoute", "R2");
 
 
-socketRef.current.on("busLocationUpdate", (bus) => {
-  setBusesData((prev) => {
-    const exists = prev.find((b) => b.id === bus.id);
 
-    if (exists) {
-      return prev.map((b) => (b.id === bus.id ? bus : b));
-    } else {
-      return [...prev, bus];
-    }
-  });
+    socketRef.current.emit("joinRoute", "R1");
 
-  const { id, lat, lng, status, etaSeconds, stopName } = bus;
 
-  if (!markersRef.current[id]) {
-    markersRef.current[id] = L.marker([lat, lng], {
-      icon: busIcon,
-    })
-      .addTo(mapRef.current)
-      .on("click", () => setSelectedBusId(id))
-      .bindPopup(id);
-  }
 
-  const popupText =
-    status === "STOPPED"
-      ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
-      : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+    socketRef.current.on("routeSnapshot", (buses) => {
+   // console.log("ROUTE SNAPSHOT RECEIVED:", buses.map(b => b.id));
 
-  markersRef.current[id].setPopupContent(popupText);
+      setBusesData(buses);
 
-  if (status === "RUNNING") {
-    animateMarker(markersRef.current[id], lat, lng);
-  }
+      buses.forEach((bus) => {
+        const { id, lat, lng, status, etaSeconds, stopName } = bus;
 
-  if (id === selectedBusRef.current && status === "RUNNING") {
-    mapRef.current.panTo([lat, lng], { animate: true, duration: 1 });
-  }
-});
+        if (!markersRef.current[id]) {
+          markersRef.current[id] = L.marker([lat, lng], {
+            icon: busIcon,
+          })
+            .addTo(mapRef.current)
+            .on("click", () => setSelectedBusId(id))
+            .bindPopup(id);
+        }
 
+        const popupText =
+          status === "STOPPED"
+            ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
+            : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+
+        markersRef.current[id].setPopupContent(popupText);
+      });
+    });
+
+    socketRef.current.on("busLocationUpdate", (bus) => {
+      setBusesData((prev) => {
+        const exists = prev.find((b) => b.id === bus.id);
+
+        if (exists) {
+          return prev.map((b) => (b.id === bus.id ? bus : b));
+        } else {
+          return [...prev, bus];
+        }
+      });
+
+      const { id, lat, lng, status, etaSeconds, stopName } = bus;
+
+      if (!markersRef.current[id]) {
+        markersRef.current[id] = L.marker([lat, lng], {
+          icon: busIcon,
+        })
+          .addTo(mapRef.current)
+          .on("click", () => setSelectedBusId(id))
+          .bindPopup(id);
+      }
+
+      const popupText =
+        status === "STOPPED"
+          ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
+          : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+
+      markersRef.current[id].setPopupContent(popupText);
+
+      if (status === "RUNNING") {
+        animateMarker(markersRef.current[id], lat, lng);
+      }
+
+      if (id === selectedBusRef.current && status === "RUNNING") {
+        mapRef.current.panTo([lat, lng], { animate: true, duration: 1 });
+      }
+    });
 
     return () => {
       socketRef.current.disconnect();
     };
-  }, []); // intentional
+  }, []); 
 
   return (
     <>
