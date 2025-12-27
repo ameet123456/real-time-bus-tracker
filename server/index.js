@@ -1,7 +1,7 @@
 const express = require("express");
 const http = require("http");
 const socketIO = require("socket.io");
-const routeCoordinates = require("./routeData");
+const routes = require("./routes");
 const busStops = require("./busStops");
 
 const buses = [
@@ -41,15 +41,24 @@ io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
   socket.on("joinRoute", (routeId) => {
+    if (!routes[routeId]) {
+      console.error(`Invalid routeId: ${routeId}`);
+      return;
+    }
     const roomName = `route:${routeId}`;
     socket.join(roomName);
-
     console.log(`Client ${socket.id} joined room: ${roomName}`);
+
+    socket.emit("routeInfo", {
+      routeId,
+      coordinates: routes[routeId].coordinates,
+    });
 
     const snapshotData = buses
       .filter((bus) => bus.routeId === routeId)
       .map((bus) => {
-        const point = routeCoordinates[bus.index];
+        const route = routes[bus.routeId];
+        const point = route.coordinates[bus.index];
         if (!point) return null;
 
         const nextStop = busStops.find((s) => s.index > bus.index);
@@ -66,11 +75,13 @@ io.on("connection", (socket) => {
         };
       })
       .filter(Boolean);
-    // console.log(
-    //   `Snapshot sent for route ${routeId}:`,
-    //   snapshotData.map((b) => b.id)
-    // );
+
     socket.emit("routeSnapshot", snapshotData);
+  });
+  socket.on("leaveRoute", (routeId) => {
+    const roomName = `route:${routeId}`;
+    socket.leave(roomName);
+    console.log(`Client ${socket.id} left room: ${roomName}`);
   });
 });
 
@@ -96,13 +107,16 @@ setInterval(() => {
       } else {
         bus.index++;
 
-        if (bus.index >= routeCoordinates.length) {
+        const route = routes[bus.routeId];
+
+        if (bus.index >= route.coordinates.length) {
           bus.index = 0;
           bus.lastStopIndex = null;
         }
       }
 
-      const point = routeCoordinates[bus.index];
+      const route = routes[bus.routeId];
+      const point = route.coordinates[bus.index];
       if (!point) return null;
 
       const nextStop = busStops.find((s) => s.index > bus.index);

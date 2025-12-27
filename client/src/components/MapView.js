@@ -14,9 +14,13 @@ export default function MapView() {
   const markersRef = useRef({});
   const socketRef = useRef(null);
   const selectedBusRef = useRef(null);
+  const routeLineRef = useRef(null);
+
 
   const [busesData, setBusesData] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
+  const [currentRoute, setCurrentRoute] = useState("R2");
+
   useEffect(() => {
     selectedBusRef.current = selectedBusId;
   }, [selectedBusId]);
@@ -45,19 +49,7 @@ export default function MapView() {
     }, duration / frames);
   }
 
-  const route = [
-    { lat: 21.0, lng: 83.78 },
-    { lat: 21.002, lng: 83.7815 },
-    { lat: 21.004, lng: 83.783 },
-    { lat: 21.006, lng: 83.7845 },
-    { lat: 21.008, lng: 83.786 },
-    { lat: 21.01, lng: 83.7875 },
-    { lat: 21.012, lng: 83.789 },
-    { lat: 21.014, lng: 83.7905 },
-    { lat: 21.016, lng: 83.792 },
-    { lat: 21.018, lng: 83.7935 },
-    { lat: 21.02, lng: 83.795 },
-  ];
+ 
 
   useEffect(() => {
     // INIT MAP (once)
@@ -67,20 +59,27 @@ export default function MapView() {
         maxZoom: 20,
       }).addTo(mapRef.current);
 
-      L.polyline(route, { color: "red", weight: 2 }).addTo(mapRef.current);
-      mapRef.current.fitBounds(L.latLngBounds(route));
+      
     }
 
     socketRef.current = io("http://localhost:3001");
 
+    socketRef.current.emit("joinRoute", currentRoute);
+socketRef.current.on("routeInfo", (route) => {
+  if (routeLineRef.current) {
+    mapRef.current.removeLayer(routeLineRef.current);
+  }
 
+  routeLineRef.current = L.polyline(route.coordinates, {
+    color: "red",
+    weight: 2,
+  }).addTo(mapRef.current);
 
-    socketRef.current.emit("joinRoute", "R1");
-
-
+  mapRef.current.fitBounds(L.latLngBounds(route.coordinates));
+});
 
     socketRef.current.on("routeSnapshot", (buses) => {
-   // console.log("ROUTE SNAPSHOT RECEIVED:", buses.map(b => b.id));
+      // console.log("ROUTE SNAPSHOT RECEIVED:", buses.map(b => b.id));
 
       setBusesData(buses);
 
@@ -146,10 +145,33 @@ export default function MapView() {
     return () => {
       socketRef.current.disconnect();
     };
-  }, []); 
+  }, []);
+
+  function switchRoute(newRoute) {
+    if (newRoute === currentRoute) return;
+
+    // 1️⃣ Leave old route
+    socketRef.current.emit("leaveRoute", currentRoute);
+
+    // 2️⃣ Clear frontend state
+    setBusesData([]);
+    setSelectedBusId(null);
+
+    Object.values(markersRef.current).forEach((marker) => {
+      mapRef.current.removeLayer(marker);
+    });
+    markersRef.current = {};
+
+    // 3️⃣ Join new route
+    socketRef.current.emit("joinRoute", newRoute);
+    setCurrentRoute(newRoute);
+  }
 
   return (
     <>
+      <button onClick={() => switchRoute("R1")}>Route R1</button>
+      <button onClick={() => switchRoute("R2")}>Route R2</button>
+
       <div id="map"></div>
 
       <div className="bus-panel">
