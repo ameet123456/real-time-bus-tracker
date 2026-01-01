@@ -16,7 +16,6 @@ export default function MapView() {
   const selectedBusRef = useRef(null);
   const routeLineRef = useRef(null);
 
-
   const [busesData, setBusesData] = useState([]);
   const [selectedBusId, setSelectedBusId] = useState(null);
   const [currentRoute, setCurrentRoute] = useState("R2");
@@ -30,7 +29,7 @@ export default function MapView() {
       clearInterval(marker._interval);
     }
 
-    const duration = 1800;
+    const duration = 500;
     const frames = 60;
     const start = marker.getLatLng();
 
@@ -49,8 +48,6 @@ export default function MapView() {
     }, duration / frames);
   }
 
- 
-
   useEffect(() => {
     // INIT MAP (once)
     if (!mapRef.current) {
@@ -58,25 +55,23 @@ export default function MapView() {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 20,
       }).addTo(mapRef.current);
-
-      
     }
 
     socketRef.current = io("http://localhost:3001");
 
     socketRef.current.emit("joinRoute", currentRoute);
-socketRef.current.on("routeInfo", (route) => {
-  if (routeLineRef.current) {
-    mapRef.current.removeLayer(routeLineRef.current);
-  }
+    socketRef.current.on("routeInfo", (route) => {
+      if (routeLineRef.current) {
+        mapRef.current.removeLayer(routeLineRef.current);
+      }
 
-  routeLineRef.current = L.polyline(route.coordinates, {
-    color: "red",
-    weight: 2,
-  }).addTo(mapRef.current);
+      routeLineRef.current = L.polyline(route.coordinates, {
+        color: "red",
+        weight: 2,
+      }).addTo(mapRef.current);
 
-  mapRef.current.fitBounds(L.latLngBounds(route.coordinates));
-});
+      mapRef.current.fitBounds(L.latLngBounds(route.coordinates));
+    });
 
     socketRef.current.on("routeSnapshot", (buses) => {
       // console.log("ROUTE SNAPSHOT RECEIVED:", buses.map(b => b.id));
@@ -84,8 +79,7 @@ socketRef.current.on("routeInfo", (route) => {
       setBusesData(buses);
 
       buses.forEach((bus) => {
-        const { id, lat, lng, status, etaSeconds, stopName } = bus;
-
+        const { id, lat, lng, state } = bus;
         if (!markersRef.current[id]) {
           markersRef.current[id] = L.marker([lat, lng], {
             icon: busIcon,
@@ -96,15 +90,27 @@ socketRef.current.on("routeInfo", (route) => {
         }
 
         const popupText =
-          status === "STOPPED"
-            ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
-            : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+          state === "STOPPED" ? `${id}<br/>STOPPED` : `${id}<br/>MOVING`;
 
         markersRef.current[id].setPopupContent(popupText);
       });
     });
 
     socketRef.current.on("busLocationUpdate", (bus) => {
+
+console.log(
+  "UI:",
+  bus.id,
+  {
+    speedKmph: bus.speedKmph,
+    speedMps: bus.speedMps,
+    progress: bus.progressPercent,
+    eta: bus.etaSeconds,
+    state: bus.state,
+    time: new Date(bus.timestamp).toLocaleTimeString(),
+  }
+);
+
       setBusesData((prev) => {
         const exists = prev.find((b) => b.id === bus.id);
 
@@ -115,7 +121,7 @@ socketRef.current.on("routeInfo", (route) => {
         }
       });
 
-      const { id, lat, lng, status, etaSeconds, stopName } = bus;
+      const { id, lat, lng, state, etaSeconds, stopName } = bus;
 
       if (!markersRef.current[id]) {
         markersRef.current[id] = L.marker([lat, lng], {
@@ -127,17 +133,17 @@ socketRef.current.on("routeInfo", (route) => {
       }
 
       const popupText =
-        status === "STOPPED"
-          ? `${id}<br/>STOPPED at ${stopName}<br/>Departing in ${etaSeconds}s`
-          : `${id}<br/>ETA to next stop: ${etaSeconds}s`;
+        state === "STOPPED" ? `${id}<br/>STOPPED` : `${id}<br/>MOVING`;
 
       markersRef.current[id].setPopupContent(popupText);
 
-      if (status === "RUNNING") {
+      markersRef.current[id].setLatLng([lat, lng]);
+
+      if (state === "MOVING") {
         animateMarker(markersRef.current[id], lat, lng);
       }
 
-      if (id === selectedBusRef.current && status === "RUNNING") {
+      if (id === selectedBusRef.current && state === "MOVING") {
         mapRef.current.panTo([lat, lng], { animate: true, duration: 1 });
       }
     });
@@ -177,24 +183,53 @@ socketRef.current.on("routeInfo", (route) => {
       <div className="bus-panel">
         <h3>Active Buses</h3>
         {busesData.map((bus) => (
+          
           <div
             key={bus.id}
-            className={`bus-item ${bus.status === "STOPPED" ? "stopped" : ""}`}
+            className={`bus-item ${bus.state === "STOPPED" ? "stopped" : ""}`}
           >
             <strong>{bus.id}</strong>
 
-            <div>Status: {bus.status}</div>
+            <div>Route: {bus.routeId}</div>
+            <div>State: {bus.state}</div>
 
-            {bus.status === "STOPPED" && (
-              <>
-                <div>At: {bus.stopName}</div>
-                <div>Departing in: {bus.etaSeconds}s</div>
-              </>
-            )}
+            <div>
+              Progress: {bus.progressPercentPercentPercent}%
+              <div style={{ background: "#333", height: 6, marginTop: 4 }}>
+                <div
+                  style={{
+                    width: `${bus.progressPercentPercentPercent}%`,
+                    height: "100%",
+                    background: "#4caf50",
+                  }}
+                />
+              </div>
+            </div>
 
-            {bus.status === "RUNNING" && (
-              <div>ETA to next stop: {bus.etaSeconds}s</div>
-            )}
+            <div>
+              ETA: {bus.etaSeconds === null ? "Paused" : `${bus.etaSeconds}s`}
+            </div>
+
+            <div>
+              Last update: {new Date(bus.timestamp).toLocaleTimeString()}
+            </div>
+<div>
+  Speed: {bus.speedKmph === 0 ? "Stopped" : `${bus.speedKmph} km/h`}
+</div>
+
+            <button
+              onClick={() => socketRef.current.emit("pauseBus", bus.id)}
+              disabled={bus.state === "PAUSED"}
+            >
+              Pause
+            </button>
+
+            <button
+              onClick={() => socketRef.current.emit("resumeBus", bus.id)}
+              disabled={bus.state !== "PAUSED"}
+            >
+              Resume
+            </button>
           </div>
         ))}
       </div>
